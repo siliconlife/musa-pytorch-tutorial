@@ -9,24 +9,28 @@ import torch.nn as nn
 import numpy as np
 
 
-# Device configuration
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# Device configuration, compatible for MUSA
+try:
+    import torch_musa
+    device = torch.device('musa' if torch.musa.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
+except ImportError:
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def load_image(image_path, transform=None, max_size=None, shape=None):
     """Load an image and convert it to a torch tensor."""
     image = Image.open(image_path)
-    
+
     if max_size:
         scale = max_size / max(image.size)
         size = np.array(image.size) * scale
         image = image.resize(size.astype(int), Image.ANTIALIAS)
-    
+
     if shape:
         image = image.resize(shape, Image.LANCZOS)
-    
+
     if transform:
         image = transform(image).unsqueeze(0)
-    
+
     return image.to(device)
 
 
@@ -34,9 +38,9 @@ class VGGNet(nn.Module):
     def __init__(self):
         """Select conv1_1 ~ conv5_1 activation maps."""
         super(VGGNet, self).__init__()
-        self.select = ['0', '5', '10', '19', '28'] 
+        self.select = ['0', '5', '10', '19', '28']
         self.vgg = models.vgg19(pretrained=True).features
-        
+
     def forward(self, x):
         """Extract multiple convolutional feature maps."""
         features = []
@@ -48,28 +52,28 @@ class VGGNet(nn.Module):
 
 
 def main(config):
-    
+
     # Image preprocessing
     # VGGNet was trained on ImageNet where images are normalized by mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225].
     # We use the same normalization statistics here.
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(mean=(0.485, 0.456, 0.406), 
+        transforms.Normalize(mean=(0.485, 0.456, 0.406),
                              std=(0.229, 0.224, 0.225))])
-    
+
     # Load content and style images
     # Make the style image same size as the content image
     content = load_image(config.content, transform, max_size=config.max_size)
     style = load_image(config.style, transform, shape=[content.size(2), content.size(3)])
-    
+
     # Initialize a target image with the content image
     target = content.clone().requires_grad_(True)
-    
+
     optimizer = torch.optim.Adam([target], lr=config.lr, betas=[0.5, 0.999])
     vgg = VGGNet().to(device).eval()
-    
+
     for step in range(config.total_step):
-        
+
         # Extract multiple(5) conv feature vectors
         target_features = vgg(target)
         content_features = vgg(content)
@@ -91,16 +95,16 @@ def main(config):
             f3 = torch.mm(f3, f3.t())
 
             # Compute style loss with target and style images
-            style_loss += torch.mean((f1 - f3)**2) / (c * h * w) 
-        
+            style_loss += torch.mean((f1 - f3)**2) / (c * h * w)
+
         # Compute total loss, backprop and optimize
-        loss = content_loss + config.style_weight * style_loss 
+        loss = content_loss + config.style_weight * style_loss
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
         if (step+1) % config.log_step == 0:
-            print ('Step [{}/{}], Content Loss: {:.4f}, Style Loss: {:.4f}' 
+            print ('Step [{}/{}], Content Loss: {:.4f}, Style Loss: {:.4f}'
                    .format(step+1, config.total_step, content_loss.item(), style_loss.item()))
 
         if (step+1) % config.sample_step == 0:

@@ -1,5 +1,5 @@
 # Some part of the code was referenced from below.
-# https://github.com/pytorch/examples/tree/master/word_language_model 
+# https://github.com/pytorch/examples/tree/master/word_language_model
 import torch
 import torch.nn as nn
 import numpy as np
@@ -7,8 +7,12 @@ from torch.nn.utils import clip_grad_norm_
 from data_utils import Dictionary, Corpus
 
 
-# Device configuration
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# Device configuration, compatible for MUSA
+try:
+    import torch_musa
+    device = torch.device('musa' if torch.musa.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
+except ImportError:
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Hyper-parameters
 embed_size = 128
@@ -34,17 +38,17 @@ class RNNLM(nn.Module):
         self.embed = nn.Embedding(vocab_size, embed_size)
         self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
         self.linear = nn.Linear(hidden_size, vocab_size)
-        
+
     def forward(self, x, h):
         # Embed word ids to vectors
         x = self.embed(x)
-        
+
         # Forward propagate LSTM
         out, (h, c) = self.lstm(x, h)
-        
+
         # Reshape output to (batch_size*sequence_length, hidden_size)
         out = out.reshape(out.size(0)*out.size(1), out.size(2))
-        
+
         # Decode hidden states of all time steps
         out = self.linear(out)
         return out, (h, c)
@@ -57,24 +61,24 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # Truncated backpropagation
 def detach(states):
-    return [state.detach() for state in states] 
+    return [state.detach() for state in states]
 
 # Train the model
 for epoch in range(num_epochs):
     # Set initial hidden and cell states
     states = (torch.zeros(num_layers, batch_size, hidden_size).to(device),
               torch.zeros(num_layers, batch_size, hidden_size).to(device))
-    
+
     for i in range(0, ids.size(1) - seq_length, seq_length):
         # Get mini-batch inputs and targets
         inputs = ids[:, i:i+seq_length].to(device)
         targets = ids[:, (i+1):(i+1)+seq_length].to(device)
-        
+
         # Forward pass
         states = detach(states)
         outputs, states = model(inputs, states)
         loss = criterion(outputs, targets.reshape(-1))
-        
+
         # Backward and optimize
         optimizer.zero_grad()
         loss.backward()
@@ -98,7 +102,7 @@ with torch.no_grad():
         input = torch.multinomial(prob, num_samples=1).unsqueeze(1).to(device)
 
         for i in range(num_samples):
-            # Forward propagate RNN 
+            # Forward propagate RNN
             output, state = model(input, state)
 
             # Sample a word id

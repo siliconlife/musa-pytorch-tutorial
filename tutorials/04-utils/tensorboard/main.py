@@ -5,18 +5,18 @@ from torchvision import transforms
 from logger import Logger
 
 
-# Device configuration
+# Device configuration, compatible for MUSA
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# MNIST dataset 
-dataset = torchvision.datasets.MNIST(root='../../data', 
-                                     train=True, 
-                                     transform=transforms.ToTensor(),  
+# MNIST dataset
+dataset = torchvision.datasets.MNIST(root='../../data',
+                                     train=True,
+                                     transform=transforms.ToTensor(),
                                      download=True)
 
 # Data loader
-data_loader = torch.utils.data.DataLoader(dataset=dataset, 
-                                          batch_size=100, 
+data_loader = torch.utils.data.DataLoader(dataset=dataset,
+                                          batch_size=100,
                                           shuffle=True)
 
 
@@ -24,10 +24,10 @@ data_loader = torch.utils.data.DataLoader(dataset=dataset,
 class NeuralNet(nn.Module):
     def __init__(self, input_size=784, hidden_size=500, num_classes=10):
         super(NeuralNet, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size) 
+        self.fc1 = nn.Linear(input_size, hidden_size)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_size, num_classes)  
-    
+        self.fc2 = nn.Linear(hidden_size, num_classes)
+
     def forward(self, x):
         out = self.fc1(x)
         out = self.relu(out)
@@ -39,8 +39,8 @@ model = NeuralNet().to(device)
 logger = Logger('./logs')
 
 # Loss and optimizer
-criterion = nn.CrossEntropyLoss()  
-optimizer = torch.optim.Adam(model.parameters(), lr=0.00001)  
+criterion = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.00001)
 
 data_iter = iter(data_loader)
 iter_per_epoch = len(data_loader)
@@ -48,7 +48,7 @@ total_step = 50000
 
 # Start training
 for step in range(total_step):
-    
+
     # Reset the data_iter
     if (step+1) % iter_per_epoch == 0:
         data_iter = iter(data_loader)
@@ -56,11 +56,11 @@ for step in range(total_step):
     # Fetch images and labels
     images, labels = next(data_iter)
     images, labels = images.view(images.size(0), -1).to(device), labels.to(device)
-    
+
     # Forward pass
     outputs = model(images)
     loss = criterion(outputs, labels)
-    
+
     # Backward and optimize
     optimizer.zero_grad()
     loss.backward()
@@ -71,7 +71,7 @@ for step in range(total_step):
     accuracy = (labels == argmax.squeeze()).float().mean()
 
     if (step+1) % 100 == 0:
-        print ('Step [{}/{}], Loss: {:.4f}, Acc: {:.2f}' 
+        print ('Step [{}/{}], Loss: {:.4f}, Acc: {:.2f}'
                .format(step+1, total_step, loss.item(), accuracy.item()))
 
         # ================================================================== #

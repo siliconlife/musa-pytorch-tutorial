@@ -11,8 +11,12 @@ import torchvision
 import torchvision.transforms as transforms
 
 
-# Device configuration
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# Device configuration, compatible for MUSA
+try:
+    import torch_musa
+    device = torch.device('musa' if torch.musa.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
+except ImportError:
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Hyper-parameters
 num_epochs = 80
@@ -28,12 +32,12 @@ transform = transforms.Compose([
 
 # CIFAR-10 dataset
 train_dataset = torchvision.datasets.CIFAR10(root='../../data/',
-                                             train=True, 
+                                             train=True,
                                              transform=transform,
                                              download=True)
 
 test_dataset = torchvision.datasets.CIFAR10(root='../../data/',
-                                            train=False, 
+                                            train=False,
                                             transform=transforms.ToTensor())
 
 # Data loader
@@ -47,7 +51,7 @@ test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
 
 # 3x3 convolution
 def conv3x3(in_channels, out_channels, stride=1):
-    return nn.Conv2d(in_channels, out_channels, kernel_size=3, 
+    return nn.Conv2d(in_channels, out_channels, kernel_size=3,
                      stride=stride, padding=1, bias=False)
 
 # Residual block
@@ -60,7 +64,7 @@ class ResidualBlock(nn.Module):
         self.conv2 = conv3x3(out_channels, out_channels)
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.downsample = downsample
-        
+
     def forward(self, x):
         residual = x
         out = self.conv1(x)
@@ -87,7 +91,7 @@ class ResNet(nn.Module):
         self.layer3 = self.make_layer(block, 64, layers[2], 2)
         self.avg_pool = nn.AvgPool2d(8)
         self.fc = nn.Linear(64, num_classes)
-        
+
     def make_layer(self, block, out_channels, blocks, stride=1):
         downsample = None
         if (stride != 1) or (self.in_channels != out_channels):
@@ -100,7 +104,7 @@ class ResNet(nn.Module):
         for i in range(1, blocks):
             layers.append(block(out_channels, out_channels))
         return nn.Sequential(*layers)
-    
+
     def forward(self, x):
         out = self.conv(x)
         out = self.bn(out)
@@ -112,7 +116,7 @@ class ResNet(nn.Module):
         out = out.view(out.size(0), -1)
         out = self.fc(out)
         return out
-    
+
 model = ResNet(ResidualBlock, [2, 2, 2]).to(device)
 
 
@@ -121,7 +125,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # For updating learning rate
-def update_lr(optimizer, lr):    
+def update_lr(optimizer, lr):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
@@ -132,16 +136,16 @@ for epoch in range(num_epochs):
     for i, (images, labels) in enumerate(train_loader):
         images = images.to(device)
         labels = labels.to(device)
-        
+
         # Forward pass
         outputs = model(images)
         loss = criterion(outputs, labels)
-        
+
         # Backward and optimize
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        
+
         if (i+1) % 100 == 0:
             print ("Epoch [{}/{}], Step [{}/{}] Loss: {:.4f}"
                    .format(epoch+1, num_epochs, i+1, total_step, loss.item()))
